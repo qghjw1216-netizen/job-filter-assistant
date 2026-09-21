@@ -81,11 +81,12 @@ export const MSG = {
   AI_RESUME_EXTRACT: 'AI_RESUME_EXTRACT', // 简历文本 -> 画像草稿
   AI_MATCH_SCORE: 'AI_MATCH_SCORE', // 单岗位匹配打分
   AI_MATCH_BATCH: 'AI_MATCH_BATCH', // 批量匹配
+  AI_TAILOR_RESUME: 'AI_TAILOR_RESUME', // 按岗位 JD 生成简历定制建议（不落库，会话内使用）
 
   // 面板控制
   OPEN_OPTIONS: 'OPEN_OPTIONS',
   OPEN_SIDEPANEL: 'OPEN_SIDEPANEL',
-  OPEN_JOB_WINDOW: 'OPEN_JOB_WINDOW', // 在新窗口打开岗位页（不影响当前浏览），配合剪贴板手动粘贴
+  OPEN_JOB_CHAT: 'OPEN_JOB_CHAT', // 新建标签页打开岗位并自动进入与 HR 的沟通（保留当前标签），配合剪贴板手动粘贴
 };
 
 // content-script 嗅探事件的 window.postMessage 频道

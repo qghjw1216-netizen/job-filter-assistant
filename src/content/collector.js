@@ -110,12 +110,17 @@
     });
   }
   reportContext();
+  // 首次加载即在聊天页（点「立即沟通」整页跳转过来的场景）：接力填入暂存招呼语。
+  // MutationObserver 只在后续 URL 变化时触发，初次加载得在这里主动消费一次。
+  if (detectChat()) setTimeout(() => { consumePendingGreetingOnChatPage().catch(() => {}); }, 800);
   // SPA 路由变化监听
   let lastUrl = location.href;
   const obs = new MutationObserver(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       reportContext();
+      // 若刚跳进聊天页（SPA 软跳转场景），也尝试接力填入暂存招呼语
+      if (detectChat()) setTimeout(() => { consumePendingGreetingOnChatPage().catch(() => {}); }, 800);
     }
   });
   try {
@@ -284,8 +289,16 @@
     return (scope && byText(scope)) || byText(document) || null;
   }
 
-  // 找「开始/继续沟通」按钮：岗位详情页上点它才会弹出聊天窗口
+  // 找「开始/继续沟通」按钮：岗位详情页/列表抽屉里点它会（整页）跳转到聊天页。
+  // 优先用真机实测确认的稳定 class；文字匹配作兜底（class 改版时仍能命中）。
   function findStartChatButton() {
+    if (PLATFORM === 'boss') {
+      // 实测：列表页抽屉 = a.op-btn-chat；独立详情页 = a.btn-startchat
+      for (const sel of ['a.op-btn-chat', 'a.btn-startchat', '.op-btn-chat', '.btn-startchat']) {
+        const el = document.querySelector(sel);
+        if (el && isVisible(el)) return el;
+      }
+    }
     const re = PLATFORM === 'boss'
       ? /立即沟通|继续沟通|马上沟通|开始聊天/
       : /立即沟通|继续沟通|在线沟通|聊一聊|投递并沟通/;
@@ -298,20 +311,55 @@
       }) || null;
   }
 
-  // 确保聊天输入框可用：已在就直接返回；否则点「立即沟通」并轮询等待其出现
-  async function ensureChatInput(maxWaitMs = 4000) {
-    let input = findChatInput();
-    if (input) return input;
-    const start = findStartChatButton();
-    if (!start) return null; // 既没输入框也没沟通按钮：这不是可发送的页面
-    start.click();
+  // 轮询等待某元素出现（用于等按钮/输入框在 SPA 里渲染出来）
+  async function waitFor(fn, maxMs, gap = 300) {
     const t0 = Date.now();
-    while (Date.now() - t0 < maxWaitMs) {
-      await new Promise((r) => setTimeout(r, 250));
-      input = findChatInput();
-      if (input) return input;
+    for (;;) {
+      const v = fn();
+      if (v) return v;
+      if (Date.now() - t0 >= maxMs) return null;
+      await new Promise((r) => setTimeout(r, gap));
     }
-    return null;
+  }
+
+  // —— 跨导航接力：暂存招呼语 ——
+  // 实测：BOSS 点「立即沟通」是整页跳转到 /web/geek/chat，会销毁当前 content-script。
+  // 故点击前把招呼语存进 storage，跳转后由聊天页新加载的 content-script 取出填入。
+  const PENDING_KEY = 'jobHelperPendingGreetingV1';
+  function savePendingGreeting(text) {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ [PENDING_KEY]: { text, platform: PLATFORM, at: Date.now() } }, () => resolve());
+      } catch { resolve(); }
+    });
+  }
+  // 一次性读取并清除（避免下次进聊天页误填旧招呼语）
+  function takePendingGreeting() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(PENDING_KEY, (obj) => {
+          const p = obj && obj[PENDING_KEY];
+          chrome.storage.local.remove(PENDING_KEY, () => {});
+          // 90 秒过期：超时的视为失效，不填
+          if (p && p.text && Date.now() - (p.at || 0) < 90000) resolve(p);
+          else resolve(null);
+        });
+      } catch { resolve(null); }
+    });
+  }
+
+  // 聊天页接力：若本页是聊天页且有暂存招呼语，等输入框出现后填入（不自动发送，交用户确认）
+  let pendingConsumed = false;
+  async function consumePendingGreetingOnChatPage() {
+    if (pendingConsumed || !detectChat()) return;
+    pendingConsumed = true; // 同步占位，避免 init 与 MutationObserver 并发导致重复填入
+    // 先等输入框出现，再取 pending：直接进聊天页时会话未选中、输入框可能延迟或不渲染，
+    // 若先取走 pending 再等，渲染失败就把招呼语弄丢了。等到输入框才消费，更稳。
+    const input = await waitFor(findChatInput, 10000);
+    if (!input) { pendingConsumed = false; return; } // 释放占位，等会话选中后由后续触发补填；招呼语仍在剪贴板
+    const pending = await takePendingGreeting();
+    if (!pending) return; // 已被其他触发消费
+    setInputValue(input, pending.text);
   }
 
   // 写入值：textarea/input 与 contenteditable 分别处理，并派发框架能感知的事件
@@ -339,31 +387,39 @@
     }
   }
 
+  // 策略（真机实测校准）：
+  //  - 已在聊天页（有 #chat-input）：直接填入招呼语，不自动发送（交用户确认，规避误发/封号）。
+  //  - 在详情页/列表页（有「立即沟通」按钮、无输入框）：点它会整页跳转到 /web/geek/chat，
+  //    会销毁当前 content-script。故先把招呼语存进 storage，再点按钮；跳转后由聊天页
+  //    新加载的 content-script 接力填入（见 consumePendingGreetingOnChatPage）。
   async function fillAndSend(text) {
     const content = text.trim();
     if (!content) return { ok: false, error: '招呼语为空' };
-    // 聊天框不在就先自动点「立即沟通」把窗口开出来
-    const input = await ensureChatInput();
-    if (!input) {
+
+    // 情形 A：已在聊天页，直接填（收紧到 detectChat，避免详情页启发式兜底误命中可编辑元素）
+    let input = detectChat() ? findChatInput() : null;
+    if (input) {
+      setInputValue(input, content);
+      return { ok: true, mode: 'filled', note: '已填入聊天框，请确认后发送' };
+    }
+
+    // 情形 B：等「立即沟通」按钮渲染出来
+    const start = await waitFor(findStartChatButton, 6000);
+    if (!start) {
+      // 兜底：也许输入框正在延迟渲染
+      input = await waitFor(findChatInput, 2000);
+      if (input) {
+        setInputValue(input, content);
+        return { ok: true, mode: 'filled', note: '已填入聊天框，请确认后发送' };
+      }
       return { ok: false, error: '未找到聊天入口。请在岗位详情页或聊天列表页再试（需能看到「立即沟通」或聊天输入框）。' };
     }
-    setInputValue(input, content);
-    await new Promise((r) => setTimeout(r, 250)); // 等站点组件同步内部状态，避免发送按钮仍为禁用态
 
-    const btn = findSendButton(input);
-    if (btn && !btn.disabled) {
-      btn.click();
-    } else {
-      pressEnter(input); // 多数聊天框回车即发送
-    }
-    // 校验：输入框是否已清空（发送成功的常见信号）
-    await new Promise((r) => setTimeout(r, 300));
-    const leftover = (input.value != null ? input.value : input.textContent || '').trim();
-    if (leftover && leftover === content) {
-      // 未清空：可能需要用户手动确认。已填入，交回用户点发送。
-      return { ok: true, mode: 'filled', note: '已填入聊天框，请在页面上确认并发送' };
-    }
-    return { ok: true, mode: 'sent' };
+    // 点它会整页跳转 → 先存 pending，再点；跳转后聊天页接力填入。
+    await savePendingGreeting(content);
+    // 延迟点击，确保本次 sendResponse 先送达 background，再触发导航（导航会断开消息端口）
+    setTimeout(() => { try { start.click(); } catch {} }, 150);
+    return { ok: true, mode: 'navigating', note: '正在打开与 HR 的沟通窗口并填入招呼语' };
   }
 
   // ============================================================

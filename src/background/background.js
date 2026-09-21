@@ -11,14 +11,11 @@ import {
 import { loadProfile, saveProfile, clearProfile, sanitizeProfile } from '../common/profile.js';
 import { sanitizeProvider } from '../common/ai/providers.js';
 import { chat, chatJson, testProvider, listModels } from '../common/ai/client.js';
-import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch } from '../common/ai/prompts.js';
+import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch, buildTailorResumePrompt, sanitizeTailor } from '../common/ai/prompts.js';
 import { redactText } from '../common/ai/privacy.js';
 
 // 记录每个 tab 当前所处平台，供 UI 查询「当前站点」
 const tabContext = new Map();
-
-// 复用同一个「发招呼」辅助窗口，避免每次点发送都新开一个，堆一屏窗口
-let jobWindowId = null;
 
 // —— 侧边栏：点击工具栏图标即打开 ——
 chrome.runtime.onInstalled.addListener(async () => {
@@ -87,8 +84,8 @@ async function handle(msg, sender) {
     // ---------- 发送招呼语 ----------
     case MSG.SEND_GREETING:
       return sendGreetingToChat(msg.text, msg.platform, msg.url);
-    case MSG.OPEN_JOB_WINDOW:
-      return openJobWindow(msg.url, msg.platform);
+    case MSG.OPEN_JOB_CHAT:
+      return openJobChat(msg.text, msg.platform, msg.url);
 
     // ---------- 设置 ----------
     case MSG.SETTINGS_GET:
@@ -122,6 +119,8 @@ async function handle(msg, sender) {
       return scoreOne(msg.uid, msg.job, { force: msg.force });
     case MSG.AI_MATCH_BATCH:
       return scoreBatch(msg.uids, { force: msg.force });
+    case MSG.AI_TAILOR_RESUME:
+      return tailorResume(msg.uid, msg.job);
 
     // ---------- 面板控制 ----------
     case MSG.OPEN_OPTIONS:
@@ -189,43 +188,54 @@ async function getActiveContext() {
 // 策略：找到目标平台已打开的「沟通/聊天」标签页，交由其 content-script 做 DOM 自动填入+发送。
 // 不逆向 IM 协议、不伪造请求，等价于用户手动在聊天框里打字并点发送，风险最低。
 // url 存在时（批量发送场景）：先把该标签页导航到对应岗位详情页，再由 content-script 点「立即沟通」开聊天并发送。
-// —— 在新窗口打开岗位页，不影响用户当前正在浏览的标签/窗口 ——
-// 配合前端把招呼语复制到剪贴板：用户在新窗口里点「立即沟通」后 Ctrl+V 粘贴发送。
-// 复用同一辅助窗口（若还开着就导航过去），focused:false 不抢焦点。
-async function openJobWindow(url, platform) {
+// —— 新建标签页打开岗位并自动进入与 HR 的沟通 ——
+// 在当前窗口新开一个标签页并激活（视图跳过去），保留用户正在浏览的标签不关闭。
+// 新标签加载完成后，让其 content-script 自动点「立即沟通」开聊天，并尽力填入招呼语；
+// 填不进（BOSS 聊天框常被混淆）时招呼语已在剪贴板，用户 Ctrl+V 手动粘贴即可。
+async function openJobChat(text, platform, url) {
   const target = String(url || '').trim();
+  const content = String(text || '').trim();
   if (!target) throw new Error('该岗位没有可打开的链接');
-  if (!chrome.windows || !chrome.windows.create) {
-    // 极少数环境无 windows API：退回新标签页
-    const tab = await chrome.tabs.create({ url: target, active: false });
-    return { ok: true, mode: 'tab', tabId: tab.id };
+
+  // 新建标签页并激活（保留当前标签）
+  const tab = await chrome.tabs.create({ url: target, active: true });
+  try {
+    await waitTabComplete(tab.id);
+  } catch {
+    // 加载超时也继续尝试，content-script 可能已就绪
   }
 
-  // 1) 复用已存在的辅助窗口：导航其标签到新岗位
-  if (jobWindowId != null) {
-    try {
-      const win = await chrome.windows.get(jobWindowId, { populate: true });
-      if (win && win.tabs && win.tabs.length) {
-        const tabId = win.tabs[0].id;
-        await chrome.tabs.update(tabId, { url: target });
-        return { ok: true, mode: 'window-reused', windowId: jobWindowId, tabId };
-      }
-    } catch {
-      jobWindowId = null; // 窗口已被用户关掉
-    }
+  // content-script 自动点「立即沟通」进入聊天，并尽力填入
+  try {
+    const res = await sendMessageWithRetry(tab.id, { type: MSG.SEND_GREETING, text: content });
+    if (res && res.ok) return { ok: true, tabId: tab.id, mode: res.mode || 'sent' };
+    // 聊天已尝试打开但未能自动填入：退回手动粘贴
+    return { ok: true, tabId: tab.id, mode: 'opened', note: (res && res.error) || '' };
+  } catch (e) {
+    return { ok: true, tabId: tab.id, mode: 'opened', note: e instanceof Error ? e.message : String(e) };
   }
+}
 
-  // 2) 新建后台窗口（不抢焦点）
-  const win = await chrome.windows.create({
-    url: target,
-    focused: false,
-    type: 'normal',
-    width: 1100,
-    height: 860,
+// 等待新标签页加载完成（+ 少量沉淀时间给 SPA 渲染）
+function waitTabComplete(tabId, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = (err) => {
+      if (done) return;
+      done = true;
+      chrome.tabs.onUpdated.removeListener(listener);
+      clearTimeout(timer);
+      if (err) reject(err);
+      else setTimeout(resolve, 1500); // SPA 渲染沉淀
+    };
+    const listener = (id, info) => {
+      if (id === tabId && info.status === 'complete') finish();
+    };
+    const timer = setTimeout(() => finish(new Error('页面加载超时')), timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+    // 创建时可能已加载完成，主动查一次兜底
+    chrome.tabs.get(tabId).then((t) => { if (t && t.status === 'complete') finish(); }).catch(() => {});
   });
-  jobWindowId = win.id;
-  const tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
-  return { ok: true, mode: 'window-new', windowId: win.id, tabId };
 }
 
 async function sendGreetingToChat(text, platform, url) {
@@ -369,6 +379,21 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
   return match;
 }
 
+// —— 简历定制建议（按岗位 JD，不落库） ——
+// 只返回建议给前端会话内展示，不写入岗位库/画像/缓存，符合「简历数据仅本会话使用」。
+async function tailorResume(uid, jobArg) {
+  const provider = await getActiveProvider();
+  if (!provider) throw new Error('尚未配置 AI 供应商，请先到设置页添加');
+  const [profile, settings, jobs] = await Promise.all([loadProfile(), loadSettings(), loadJobs()]);
+  const job = jobArg || jobs.find((j) => j.uid === uid);
+  if (!job) throw new Error('岗位不存在');
+  const prompt = buildTailorResumePrompt(profile, job, {
+    includeCompany: settings.privacy.sendCompanyName,
+  });
+  const raw = await chatJson(provider, prompt, { json: true, maxTokens: 1536 });
+  return sanitizeTailor(raw);
+}
+
 // —— 匹配打分（批量，串行限速） ——
 async function scoreBatch(uids, { force = false } = {}) {
   const list = Array.isArray(uids) ? uids : [];
@@ -432,9 +457,3 @@ function sleep(ms) {
 
 // 清理关闭的 tab 上下文
 chrome.tabs.onRemoved.addListener((tabId) => tabContext.delete(tabId));
-// 辅助窗口被关掉后，清掉记录，下次重新新建
-if (chrome.windows && chrome.windows.onRemoved) {
-  chrome.windows.onRemoved.addListener((winId) => {
-    if (winId === jobWindowId) jobWindowId = null;
-  });
-}

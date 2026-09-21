@@ -66,15 +66,25 @@
       case 'PROFILE_SAVE': state.profile = msg.profile; return state.profile;
       case 'PROFILE_CLEAR': state.profile = null; return null;
       case 'AI_RESUME_EXTRACT': return { target:{jobTitles:['产品经理'],cities:['上海'],industries:[]}, basics:{yearsOfExperience:5,education:'硕士'}, capabilities:{skills:['需求分析','Axure'],strengths:['数据驱动'],industryExperience:['金融']}, workSummary:'5年产品经验', projectSummary:'', highlights:['DAU 提升30%'] };
-      case 'AI_MATCH_SCORE': { const m={score:76,verdict:'good',reasons:['演示打分'],gaps:[],risks:[],summary:'演示总评',greeting:'演示开场白',at:new Date().toISOString()}; state.jobs=state.jobs.map(j=>j.uid===msg.uid?{...j,match:m}:j); return m; }
+      case 'AI_MATCH_SCORE': { const m={score:76,verdict:'good',eligible:true,blockers:[],dims:{skill:82,experience:70,requirement:75,location:90},reasons:['演示打分','React/TS 与岗位技能吻合'],gaps:['缺少大规模 SSR 经验'],risks:[],summary:'演示总评：技能匹配度较高',greetings:{short:'演示精简开场白',standard:'演示标准开场白',detailed:'演示详细开场白'},greeting:'演示标准开场白',at:new Date().toISOString()}; state.jobs=state.jobs.map(j=>j.uid===msg.uid?{...j,match:m}:j); return m; }
       case 'AI_MATCH_BATCH': return (msg.uids||[]).map(u=>({uid:u,ok:true,score:70}));
+      case 'AI_TAILOR_RESUME': return {
+        matchedSkills:['React','TypeScript','组件库建设','性能优化'],
+        missingSkills:['大规模 SSR'],
+        keywordsToAlign:['中后台','组件化','首屏性能','工程化'],
+        summaryDraft:'4年前端开发经验，精通 React 与 TypeScript，主导过通用组件库建设覆盖 30+ 业务，并将首屏加载优化 40%。熟悉中后台复杂场景与前端工程化，能快速融入高级前端岗位。',
+        bulletSuggestions:['把「负责组件开发」改写为「主导通用组件库建设，覆盖 30+ 业务线」','突出「首屏加载优化 40%」并前置到经历首条','将 Webpack 相关内容归纳为「前端工程化」以对齐 JD'],
+        tips:['面试可能考察组件库设计与性能优化细节，准备具体量化案例','JD 提到中后台，突出复杂表单/权限相关项目经验'],
+        note:'',
+        at:new Date().toISOString(),
+      };
       case 'OPEN_OPTIONS': console.log('[mock] openOptionsPage'); return { ok:true };
       case 'OPEN_SIDEPANEL': console.log('[mock] open sidepanel'); return { ok:true };
-      case 'OPEN_JOB_WINDOW': {
+      case 'OPEN_JOB_CHAT': {
         if (!msg.url) throw new Error('该岗位没有可打开的链接');
-        state.lastWindowOpen = { url: msg.url, platform: msg.platform, at: Date.now() };
-        console.log('[mock] OPEN_JOB_WINDOW (focused:false):', msg.url);
-        return { ok:true, mode:'window-new', windowId: 99, tabId: 199 };
+        state.lastChatOpen = { url: msg.url, platform: msg.platform, text: msg.text, at: Date.now() };
+        console.log('[mock] OPEN_JOB_CHAT (new active tab):', msg.url);
+        return { ok:true, mode:'opened', tabId: 199 };
       }
       default: return { ok:true };
     }
