@@ -1,0 +1,67 @@
+{
+  "manifest_version": 3,
+  "name": "岗位筛选助手 · BOSS/前程无忧",
+  "short_name": "岗位助手",
+  "version": "1.0.0",
+  "description": "BOSS直聘与前程无忧通用的岗位筛选助手：自动抓取岗位、AI 简历画像、逐岗位匹配分析。支持任意兼容主流协议的 AI 接口。",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "96": "icons/96.png",
+    "128": "icons/128.png"
+  },
+  "permissions": ["storage", "activeTab", "tabs", "sidePanel", "scripting", "downloads"],
+  "host_permissions": [
+    "https://*.zhipin.com/*",
+    "https://*.51job.com/*",
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "岗位筛选助手",
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.zhipin.com/*",
+        "https://*.zhipin.com/*",
+        "https://we.51job.com/*",
+        "https://*.51job.com/*"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "js": ["src/content/sniffer.js"]
+    },
+    {
+      "matches": [
+        "https://www.zhipin.com/*",
+        "https://*.zhipin.com/*",
+        "https://we.51job.com/*",
+        "https://*.51job.com/*"
+      ],
+      "run_at": "document_idle",
+      "css": ["src/content/collector.css"],
+      "js": ["src/content/collector.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/vendor/pdf.worker.min.mjs"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "jobId": "888800011",
+  "jobName": "python开发工程师",
+  "provideSalaryString": "1.1-1.8万·13薪",
+  "jobSalaryMin": "11000",
+  "jobSalaryMax": "18000",
+  "jobAreaLevelDetail": { "cityString": "珠海", "districtString": "香洲区" },
+  "jobAreaString": "珠海·香洲区",
+  "workYearString": "3-4年经验",
+  "degreeString": "本科",
+  "jobTags": ["本科", "3-4年经验", "Python", "Django", "MySQL", "五险一金"],
+  "jobWelfareCodeDataList": [
+    { "chineseTitle": "五险一金" },
+    { "chineseTitle": "餐饮补贴" },
+    { "chineseTitle": "年终奖金" }
+  ],
+  "fullCompanyName": "示例半导体科技（珠海）有限公司",
+  "companyName": "示例半导体",
+  "coIndustryText": "半导体/集成电路",
+  "industryType1Str": "电子技术",
+  "companySizeString": "150-500人",
+  "companyTypeString": "民营公司",
+  "hrName": "示例招聘者",
+  "hrPosition": "招聘主管",
+  "jobDescribe": "岗位职责：\n1. 负责后端服务开发与维护；\n2. 参与系统架构设计。\n任职要求：\n1. 熟悉 Python 与主流 Web 框架；\n2. 熟悉 MySQL 等数据库。",
+  "jobHref": "https://jobs.51job.com/zhuhai/888800011.html",
+  "issueDateString": "2026-09-18",
+  "confirmDateString": "2026-09-18",
+  "encCoId": "ENC_CO_0001",
+  "coId": "CO_0001",
+  "funcType1Code": "0100"
+}

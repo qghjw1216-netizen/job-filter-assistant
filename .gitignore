@@ -1,0 +1,24 @@
+# 依赖
+node_modules/
+
+# 本地会话 / 编辑器配置 / 本地 MCP 工具（不入库）
+.claude/
+.vscode/
+.idea/
+.mcp.json
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 打包产物
+*.zip
+dist/
+build/
+
+# 本地私有数据（保险起见，防止任何真实简历/画像样本误入库）
+*.resume
+*简历*
+private/

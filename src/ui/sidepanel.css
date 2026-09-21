@@ -1,0 +1,251 @@
+.sp-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- 顶栏 ---------- */
+.sp-top {
+  padding: 14px 16px 10px;
+  background: var(--bg-elevated);
+  border-bottom: 0.5px solid var(--separator);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.sp-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.sp-logo {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, #0a84ff, #30d1b0);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 15px; flex: none;
+}
+.sp-title { font-size: 16px; font-weight: 600; }
+.sp-count { font-size: 12px; color: var(--text-3); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 顶级 Tab：岗位库 / 当前岗位 */
+.sp-tabs {
+  display: flex; gap: 4px;
+  padding: 3px; margin-bottom: 12px;
+  background: var(--fill); border-radius: 10px;
+}
+.sp-tab {
+  flex: 1; border: none; background: transparent;
+  color: var(--text-2); font-size: 13px; font-weight: 600;
+  padding: 7px 0; border-radius: 8px; cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+.sp-tab.active { background: var(--bg-elevated); color: var(--text); box-shadow: var(--shadow-sm); }
+
+.sp-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.sp-search {
+  flex: 1;
+  position: relative;
+}
+.sp-search input { padding-left: 32px; height: 34px; border-radius: var(--radius-pill); }
+.sp-search::before {
+  content: "🔍";
+  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  font-size: 13px; opacity: 0.5;
+}
+
+.sp-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.filter-chip {
+  padding: 4px 11px; font-size: 12px; font-weight: 500;
+  border-radius: var(--radius-pill);
+  background: var(--fill); color: var(--text-2);
+  border: none; cursor: pointer; transition: all 0.18s var(--ease);
+}
+.filter-chip.active { background: var(--accent); color: #fff; }
+
+.sp-sort {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--separator-strong);
+  background: var(--bg-elevated);
+  color: var(--text-2);
+  width: auto;
+}
+
+/* ---------- 列表 ---------- */
+.sp-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.job-card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  border: 0.5px solid var(--separator);
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+  transition: box-shadow 0.2s var(--ease), transform 0.15s var(--ease);
+}
+.job-card:hover { box-shadow: var(--shadow); }
+
+.jc-head { display: flex; gap: 10px; align-items: flex-start; }
+.jc-check { flex: none; display: flex; align-items: center; padding-top: 2px; cursor: pointer; }
+.jc-check input { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+.job-card.is-checked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.jc-main { flex: 1; min-width: 0; }
+.jc-title-row { display: flex; align-items: baseline; gap: 8px; }
+.jc-title {
+  font-size: 15px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.jc-salary { font-size: 14px; font-weight: 600; color: var(--orange); white-space: nowrap; }
+@media (prefers-color-scheme: dark) { .jc-salary { color: #ff9f0a; } }
+
+.jc-company { font-size: 13px; color: var(--text-2); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jc-meta { font-size: 12px; color: var(--text-3); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+.jc-meta .plat {
+  font-weight: 600;
+  padding: 1px 7px; border-radius: 5px; font-size: 11px;
+}
+.plat-boss { background: rgba(0,166,167,0.14); color: #00a6a7; }
+.plat-qcwy { background: rgba(235,97,0,0.14); color: #eb6100; }
+
+.jc-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+
+.jc-score {
+  flex: none;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer;
+}
+.jc-score .lbl { font-size: 10px; color: var(--text-3); }
+
+.jc-actions {
+  display: flex; gap: 6px; margin-top: 10px;
+  padding-top: 10px; border-top: 0.5px solid var(--separator);
+}
+.jc-icon-btn {
+  width: 30px; height: 30px; border-radius: 8px;
+  border: none; background: var(--fill); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  transition: background 0.16s;
+}
+.jc-icon-btn:hover { background: var(--fill-2); }
+.jc-icon-btn.starred { color: var(--orange); }
+
+/* 分析详情展开 */
+.jc-analysis {
+  margin-top: 10px; padding: 12px;
+  background: var(--card-2); border-radius: var(--radius);
+  font-size: 13px; animation: fadeUp 0.25s var(--ease) both;
+}
+.jc-analysis .summary { font-weight: 600; margin-bottom: 8px; }
+.jc-analysis h5 { font-size: 12px; color: var(--text-2); margin: 8px 0 4px; font-weight: 600; }
+.jc-analysis ul { margin: 0; padding-left: 18px; }
+.jc-analysis li { margin-bottom: 3px; line-height: 1.45; }
+.jc-analysis .greeting {
+  margin-top: 8px; padding: 10px; background: var(--accent-soft);
+  border-radius: 8px; font-size: 12px; line-height: 1.5; position: relative;
+}
+.jc-analysis .greeting .copy {
+  position: absolute; right: 8px; top: 8px; font-size: 11px; cursor: pointer;
+  color: var(--accent); font-weight: 600;
+}
+.risk-line { color: var(--red); }
+
+/* 岗位库卡片：可点击主区 */
+.jc-main.clickable { cursor: pointer; border-radius: 8px; margin: -4px; padding: 4px; transition: background 0.16s; }
+.jc-main.clickable:hover { background: var(--fill); }
+
+/* ============ 当前岗位模块 ============ */
+.cur-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px 24px;
+}
+.cur-head {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px; margin-bottom: 12px;
+  background: var(--card); border: 0.5px solid var(--separator);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+}
+.cur-head-main { flex: 1; min-width: 0; }
+.cur-title { font-size: 16px; font-weight: 600; line-height: 1.35; }
+.cur-salary { font-size: 15px; font-weight: 600; color: var(--orange); margin-top: 2px; }
+@media (prefers-color-scheme: dark) { .cur-salary { color: #ff9f0a; } }
+.cur-company { font-size: 13px; color: var(--text-2); margin-top: 4px; }
+
+.segmented.subtabs { display: flex; width: 100%; margin-bottom: 14px; }
+.segmented.subtabs button { flex: 1; }
+
+.cur-panel { font-size: 13px; }
+
+.cur-facts {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;
+  padding: 12px 14px; margin-bottom: 6px;
+  background: var(--card-2); border-radius: var(--radius);
+}
+.fact { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.fact .fk { font-size: 11px; color: var(--text-3); }
+.fact .fv { font-size: 13px; color: var(--text); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+
+.cur-sec-title { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 14px 0 7px; }
+.cur-jd {
+  white-space: pre-wrap; line-height: 1.6; color: var(--text);
+  background: var(--card-2); border-radius: var(--radius); padding: 12px 14px;
+  max-height: 260px; overflow-y: auto;
+}
+.cur-note { font-size: 11px; color: var(--text-3); margin-top: 12px; line-height: 1.5; }
+.cur-hint { font-size: 13px; color: var(--text-2); padding: 4px 0; }
+.linklike { border: none; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 0; font-size: 13px; }
+
+/* 招呼语编辑区 */
+.greet-head { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.greet-head .cur-sec-title { margin: 0; }
+.segmented.greet-levels button { padding: 4px 10px; font-size: 12px; }
+.greet-editor {
+  width: 100%; min-height: 120px; line-height: 1.6; font-size: 13px;
+  border-radius: var(--radius); resize: vertical;
+}
+.greet-count { text-align: right; font-size: 11px; color: var(--text-3); margin-top: 4px; }
+.greet-hint {
+  font-size: 12px; color: var(--text-2); margin: 8px 0;
+  padding: 8px 10px; border-radius: 8px; background: var(--fill);
+}
+.greet-hint.ok { color: #248a3d; background: rgba(48,209,88,0.14); }
+@media (prefers-color-scheme: dark) { .greet-hint.ok { color: #30d158; } }
+.greet-tools { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.greet-tools .spacer { flex: 1; }
+
+/* ---------- 底部栏 ---------- */
+.sp-bottom {
+  padding: 10px 16px;
+  background: var(--bg-elevated);
+  border-top: 0.5px solid var(--separator);
+  display: flex; gap: 8px; align-items: center;
+}
+.sp-bottom .spacer { flex: 1; }
+.sp-bottom.has-sel { display: block; }
+.batch-wrap { display: flex; flex-direction: column; gap: 8px; }
+.batch-row1 { display: flex; align-items: center; gap: 12px; }
+.batch-count { font-size: 13px; font-weight: 600; color: var(--accent); }
+.batch-row2 { display: flex; gap: 8px; }
+.batch-row2 .btn { flex: 1; }
+.batch-note { font-size: 11px; color: var(--orange); line-height: 1.4; }
+@media (prefers-color-scheme: dark) { .batch-note { color: #ff9f0a; } }
+.btn-warn { color: #fff; background: var(--orange); }
+.btn-warn:hover { background: #f59300; }
+.btn-warn:disabled { opacity: 0.5; }
+
+/* 画像提醒条 */
+.profile-hint {
+  margin: 0 16px 10px;
+  padding: 10px 12px;
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--accent);
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer;
+}
