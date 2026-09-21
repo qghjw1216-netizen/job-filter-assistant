@@ -9,7 +9,7 @@ import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../src/common/profile.js';
 import { evaluateJob, applyFilters } from '../src/common/filters.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable } from '../src/common/ai/providers.js';
-import { sanitizeMatch, scoreToVerdict, normalizeGreetings } from '../src/common/ai/prompts.js';
+import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor } from '../src/common/ai/prompts.js';
 import { redactText } from '../src/common/ai/privacy.js';
 
 let pass = 0;
@@ -307,6 +307,62 @@ test('normalizeGreetings：仅详细版时用它兜底标准/精简', () => {
   const g = normalizeGreetings({ greetings: { detailed: '详细内容' } });
   assert.equal(g.standard, '详细内容');
   assert.equal(g.short, '详细内容');
+});
+
+// ---------- 硬门槛 + 四维分（job-evaluate 方法论） ----------
+section('匹配：硬门槛与分项');
+test('有 blockers 时 eligible 判为 false', () => {
+  const m = sanitizeMatch({ score: 40, blockers: ['要求5年经验，画像仅2年'] });
+  assert.equal(m.eligible, false);
+  assert.deepEqual(m.blockers, ['要求5年经验，画像仅2年']);
+});
+test('显式 eligible:false 被保留（即使无 blockers）', () => {
+  assert.equal(sanitizeMatch({ score: 50, eligible: false }).eligible, false);
+});
+test('旧缓存无 eligible 字段默认视为 eligible', () => {
+  const m = sanitizeMatch({ score: 70 });
+  assert.equal(m.eligible, true);
+  assert.deepEqual(m.blockers, []);
+});
+test('normalizeDims：分项越界收敛到 0-100', () => {
+  const d = normalizeDims({ skill: 120, experience: -5, requirement: 60, location: 88 });
+  assert.deepEqual(d, { skill: 100, experience: 0, requirement: 60, location: 88 });
+});
+test('normalizeDims：全空返回 null（旧缓存无分项）', () => {
+  assert.equal(normalizeDims({}), null);
+  assert.equal(normalizeDims(undefined), null);
+});
+test('sanitizeMatch 带 dims 时挂上分项', () => {
+  const m = sanitizeMatch({ score: 80, dims: { skill: 90 } });
+  assert.equal(m.dims.skill, 90);
+  assert.equal(m.dims.experience, null);
+});
+
+// ---------- 简历定制建议 ----------
+section('简历定制建议规整');
+test('sanitizeTailor 规整各字段并截断', () => {
+  const t = sanitizeTailor({
+    matchedSkills: ['React', '', 'TS', 'Vue', 'Node', 'CSS', 'HTML', 'Git', '溢出'],
+    missingSkills: ['SSR'],
+    keywordsToAlign: ['中后台', '组件化'],
+    summaryDraft: '  4年前端经验……  ',
+    bulletSuggestions: ['突出组件库'],
+    tips: ['准备量化案例'],
+    note: '画像信息偏少',
+  });
+  assert.equal(t.matchedSkills.length, 8, 'matchedSkills 上限8、空串剔除');
+  assert.ok(!t.matchedSkills.includes(''));
+  assert.deepEqual(t.missingSkills, ['SSR']);
+  assert.equal(t.summaryDraft, '4年前端经验……', '首尾空白 trim');
+  assert.equal(t.note, '画像信息偏少');
+  assert.ok(t.at, '带时间戳');
+});
+test('sanitizeTailor 容忍空输入', () => {
+  const t = sanitizeTailor(null);
+  assert.deepEqual(t.matchedSkills, []);
+  assert.deepEqual(t.bulletSuggestions, []);
+  assert.equal(t.summaryDraft, '');
+  assert.equal(t.note, '');
 });
 
 // ---------- 脱敏 ----------

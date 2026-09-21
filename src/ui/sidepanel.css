@@ -154,6 +154,28 @@
 }
 .risk-line { color: var(--red); }
 
+/* 硬门槛提示 */
+.gate-warn {
+  margin-bottom: 10px; padding: 8px 10px;
+  background: rgba(255, 59, 48, 0.1); border: 1px solid rgba(255, 59, 48, 0.25);
+  border-radius: 8px;
+}
+.gate-warn .gate-title { color: var(--red); font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+.gate-warn ul { margin: 0; padding-left: 18px; }
+.gate-warn li { margin-bottom: 2px; line-height: 1.4; font-size: 12px; }
+
+/* 四维分项分 */
+.dim-box { margin: 8px 0 4px; display: flex; flex-direction: column; gap: 5px; }
+.dim-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.dim-k { width: 52px; color: var(--text-2); flex: 0 0 auto; }
+.dim-bar { flex: 1; height: 6px; background: var(--fill-2); border-radius: 3px; overflow: hidden; }
+.dim-fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s var(--ease); }
+.dim-v { width: 24px; text-align: right; color: var(--text-2); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+
+/* 简历建议列表 */
+.advice-list { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.advice-list li { margin-bottom: 5px; line-height: 1.5; }
+
 /* 岗位库卡片：可点击主区 */
 .jc-main.clickable { cursor: pointer; border-radius: 8px; margin: -4px; padding: 4px; transition: background 0.16s; }
 .jc-main.clickable:hover { background: var(--fill); }

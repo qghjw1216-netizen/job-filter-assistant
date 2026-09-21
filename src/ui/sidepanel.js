@@ -1,7 +1,7 @@
 import { MSG, MODE } from '../common/constants.js';
 import { scoreProfile } from '../common/profile.js';
 import { applyFilters } from '../common/filters.js';
-import { VERDICT_LABELS, GREETING_LEVELS, normalizeGreetings } from '../common/ai/prompts.js';
+import { VERDICT_LABELS, GREETING_LEVELS, normalizeGreetings, DIM_LABELS } from '../common/ai/prompts.js';
 import { send, h, toast, esc, debounce } from './ui-common.js';
 
 const app = document.getElementById('app');
@@ -27,6 +27,8 @@ const view = {
 let selectedUid = null; // 手动选中的「当前岗位」；null 时按页面自动识别
 const greetingCache = new Map(); // uid -> 编辑中的招呼语文本（会话态）
 let greetingTextarea = null; // 当前渲染的招呼语输入框引用
+const tailorCache = new Map(); // uid -> 简历定制建议（仅会话态，不落库）
+const tailoring = new Set(); // 正在生成简历建议的 uid
 const checked = new Set(); // 岗位库中勾选的 uid（批量操作）
 let batchBusy = false; // 批量分析进行中（禁用按钮 + 防重入）
 
@@ -410,6 +412,7 @@ function renderCurrent() {
   const sub = h('div', { class: 'segmented subtabs' }, [
     subBtn('info', '岗位信息'),
     subBtn('company', '公司画像'),
+    subBtn('resume', '简历建议'),
     subBtn('greeting', '打招呼'),
   ]);
   body.appendChild(sub);
@@ -417,6 +420,7 @@ function renderCurrent() {
   const panel = h('div', { class: 'cur-panel fade-up' });
   if (view.sub === 'info') renderJobInfo(panel, job);
   else if (view.sub === 'company') renderCompany(panel, job);
+  else if (view.sub === 'resume') renderResumeAdvice(panel, job);
   else renderGreeting(panel, job);
   body.appendChild(panel);
 
@@ -476,6 +480,28 @@ function renderJobInfo(panel, job) {
 
 function renderAnalysis(m) {
   const box = h('div', { class: 'jc-analysis' }, [m.summary ? h('div', { class: 'summary', text: m.summary }) : null]);
+  // 硬门槛提示（存在明确不匹配的强制要求时醒目提示，但不隐藏分数——由你自己判断是否投递）
+  if (m.eligible === false && m.blockers && m.blockers.length) {
+    const gate = h('div', { class: 'gate-warn' }, [h('div', { class: 'gate-title', text: '⛔ 存在硬性门槛' })]);
+    gate.appendChild(h('ul', {}, m.blockers.map((b) => h('li', { text: b }))));
+    box.appendChild(gate);
+  }
+  // 四维分项分
+  if (m.dims) {
+    const dimBox = h('div', { class: 'dim-box' });
+    ['skill', 'experience', 'requirement', 'location'].forEach((k) => {
+      const v = m.dims[k];
+      if (v == null) return;
+      dimBox.appendChild(
+        h('div', { class: 'dim-row' }, [
+          h('span', { class: 'dim-k', text: DIM_LABELS[k] }),
+          h('span', { class: 'dim-bar' }, [h('span', { class: 'dim-fill', style: `width:${v}%` })]),
+          h('span', { class: 'dim-v', text: String(v) }),
+        ]),
+      );
+    });
+    if (dimBox.children.length) box.appendChild(dimBox);
+  }
   if (m.reasons && m.reasons.length) {
     box.appendChild(h('h5', { text: '✅ 契合点' }));
     box.appendChild(h('ul', {}, m.reasons.map((r) => h('li', { text: r }))));
@@ -577,8 +603,8 @@ function renderGreeting(panel, job) {
     h('div', { class: 'greet-hint' + (onChat ? ' ok' : '') }, [
       h('span', {
         text: onChat
-          ? '✓ 已在聊天页，点发送直接送出'
-          : 'ℹ 点「发送」会自动打开与 HR 的聊天窗口并送出（需停留在该岗位详情页或聊天页）',
+          ? '✓ 已在聊天页，点下方按钮尝试直接填入'
+          : 'ℹ 点下方按钮会新建标签页打开岗位并自动进入与 HR 的沟通（保留当前标签），招呼语已复制，可 Ctrl+V 粘贴',
       }),
     ]),
   );
@@ -594,9 +620,92 @@ function renderGreeting(panel, job) {
       }),
       h('button', { class: 'btn btn-sm', text: '📋 复制', onclick: () => copyText(greetingValueFor(job)) }),
       h('div', { class: 'spacer' }),
-      h('button', { class: 'btn btn-sm btn-primary', text: '新窗口打开并复制', title: '在新窗口打开岗位页（不影响当前浏览），招呼语已复制，点「立即沟通」后 Ctrl+V 粘贴', onclick: () => sendGreeting(job) }),
+      h('button', { class: 'btn btn-sm btn-primary', text: '打开沟通并复制', title: '新建标签页打开该岗位并自动进入与 HR 的沟通（保留当前标签），招呼语已复制，可 Ctrl+V 粘贴', onclick: () => sendGreeting(job) }),
     ]),
   );
+}
+
+// —— 简历建议子页：基于画像 + 该岗位 JD，给出定制简历的建议（只建议、不落库） ——
+function renderResumeAdvice(panel, job) {
+  if (!providers.length) {
+    panel.appendChild(
+      h('div', { class: 'cur-hint' }, [h('span', { text: '尚未配置 AI 接口，' }), h('button', { class: 'linklike', text: '前往设置', onclick: () => send(MSG.OPEN_OPTIONS) })]),
+    );
+    return;
+  }
+  const hasProfile = profile && scoreProfile(profile).score > 0;
+  if (!hasProfile) {
+    panel.appendChild(
+      h('div', { class: 'cur-hint' }, [
+        h('span', { text: '简历建议基于你的个人画像生成，请先在设置里完善画像（上传简历或手动填写），' }),
+        h('button', { class: 'linklike', text: '前往设置', onclick: () => send(MSG.OPEN_OPTIONS) }),
+      ]),
+    );
+    return;
+  }
+
+  const busy = tailoring.has(job.uid);
+  const advice = tailorCache.get(job.uid);
+
+  // 顶部：说明 + 生成/重新生成按钮
+  panel.appendChild(
+    h('div', { class: 'greet-head' }, [
+      h('span', { class: 'cur-sec-title', text: '📝 简历定制建议' }),
+      h('div', { class: 'spacer' }),
+      h('button', {
+        class: 'btn btn-sm btn-primary',
+        text: busy ? '生成中…' : advice ? '↻ 重新生成' : '生成建议',
+        disabled: busy,
+        onclick: () => tailorAdvice(job),
+      }),
+    ]),
+  );
+  panel.appendChild(h('div', { class: 'tiny', text: '针对该岗位 JD，建议怎么调整简历去投递。仅给建议、不改你的原简历，只在本会话使用、不保存。' }));
+
+  if (busy && !advice) {
+    panel.appendChild(h('div', { class: 'cur-hint', style: 'margin-top:12px' }, [h('span', { class: 'spinner' }), h('span', { text: ' AI 正在分析…', style: 'margin-left:8px' })]));
+    return;
+  }
+  if (!advice) return;
+
+  const sec = (title, node) => {
+    panel.appendChild(h('div', { class: 'cur-sec-title', text: title }));
+    panel.appendChild(node);
+  };
+  const chips = (list, cls) => h('div', { class: 'jc-tags' }, list.map((t) => h('span', { class: cls, text: t })));
+  const bullets = (list) => h('ul', { class: 'advice-list' }, list.map((t) => h('li', { text: t })));
+
+  if (advice.matchedSkills.length) sec('✅ 可突出的匹配点', chips(advice.matchedSkills, 'chip chip-green'));
+  if (advice.keywordsToAlign.length) sec('🔑 建议对齐的岗位关键词', chips(advice.keywordsToAlign, 'chip'));
+  if (advice.missingSkills.length) sec('📌 暂未体现（如实指出，勿编造）', chips(advice.missingSkills, 'chip chip-orange'));
+
+  if (advice.summaryDraft) {
+    sec('🧾 自我评价草稿（可直接粘贴）', h('div', { class: 'cur-jd', text: advice.summaryDraft }));
+    panel.appendChild(h('button', { class: 'btn btn-sm', text: '📋 复制草稿', style: 'margin-top:8px', onclick: () => copyText(advice.summaryDraft) }));
+  }
+  if (advice.bulletSuggestions.length) sec('✍️ 经历改写建议', bullets(advice.bulletSuggestions));
+  if (advice.tips.length) sec('💡 投递提醒', bullets(advice.tips));
+  if (advice.note) panel.appendChild(h('div', { class: 'cur-hint', style: 'margin-top:10px' }, [h('span', { text: advice.note })]));
+}
+
+async function tailorAdvice(job) {
+  if (tailoring.has(job.uid)) return;
+  if (!providers.length) {
+    toast('尚未配置 AI 接口，请先到设置页添加', true);
+    return;
+  }
+  tailoring.add(job.uid);
+  render();
+  try {
+    const advice = await send(MSG.AI_TAILOR_RESUME, { uid: job.uid, job });
+    tailorCache.set(job.uid, advice);
+    toast('简历建议已生成');
+  } catch (e) {
+    toast(`生成失败：${e.message}`, true);
+  } finally {
+    tailoring.delete(job.uid);
+    render();
+  }
 }
 
 function renderBottom(list) {
@@ -700,14 +809,19 @@ async function sendGreeting(job) {
   // 以当前文本为准，落库
   greetingCache.set(job.uid, text);
   persistGreeting(job.uid, text);
-  // 先复制到剪贴板（无论新窗口能否打开，招呼语都在手上）
+  // 先复制到剪贴板兜底（无论聊天能否自动填入，招呼语都在手上）
   copyText(text);
+  if (!job.url) {
+    toast('招呼语已复制，该岗位没有可打开的链接，请手动打开岗位页粘贴发送', true);
+    return;
+  }
   try {
-    // 在新窗口打开岗位页，不打断当前正在浏览的页面
-    await send(MSG.OPEN_JOB_WINDOW, { url: job.url, platform: job.platform });
-    toast('已在新窗口打开岗位页，招呼语已复制，请在新窗口点「立即沟通」后 Ctrl+V 粘贴发送');
+    // 新建标签页打开岗位并自动进入与 HR 的沟通（保留当前浏览的标签）
+    const r = await send(MSG.OPEN_JOB_CHAT, { url: job.url, platform: job.platform, text });
+    if (r && r.mode === 'sent') toast('已在新标签页打开与 HR 的沟通并尝试发送，招呼语已复制备用');
+    else toast('已在新标签页打开岗位并进入沟通，招呼语已复制，请在聊天框 Ctrl+V 粘贴发送');
   } catch (e) {
-    // 无链接或打开失败：招呼语已复制，提示手动粘贴
+    // 打开失败：招呼语已复制，提示手动粘贴
     toast(`招呼语已复制，请手动打开岗位页粘贴发送（${e.message}）`, true);
   }
 }
